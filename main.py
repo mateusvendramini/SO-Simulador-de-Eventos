@@ -12,7 +12,6 @@ def dump_event(event, simulator):
     print("-------------------------------------------------------------------")
     print("Event Info")
     print("<%d> <%s> <%s> " % (simulator.t_current, event.name, event.job.name))
-    print("-------------------------------------------------------------------")
 
 
 class Event:
@@ -32,10 +31,15 @@ class Event:
     def __cmp__(self, other):
         if not isinstance(other, Event):
             return 0
-        return self.time - other.time
+        if self.time > other.time:
+            return -1
+        elif self.time < other.time:
+            return 1
+        else:
+            return 0
 
     def __lt__(self, other):
-        return self.time - other.time
+        return self.time < other.time
 
 
 class Job:
@@ -59,6 +63,7 @@ class Job:
         self.next_disk = 0
         self.cpu_time = int(cpu_time)
         self.cpu_gained = 0
+        self.start_memory = 0
 
 
 class Simulator:
@@ -193,7 +198,7 @@ class Simulator:
                 self.event_queue.put(self.disk_queue.get())
             # recoloca job na readylist
             self.event_queue.put(Event('requisita_cpu', self.t_current, event.job))
-            return "<JOB {} devolveu disco> <JOB recolocado na readylist>".event.name
+            return "<JOB {} devolveu disco> <JOB recolocado na readylist>".format(event.name)
 
         elif event.name == 'requisita_entrada':
             # libera CPU
@@ -275,7 +280,9 @@ class Simulator:
                 self.t_current = event.time
             if not self.cpu_queue.empty():
                 self.event_queue.put(self.cpu_queue.get())
-            return "<Job {} finalizado!><CPU liberada!>".format(event.job.name)
+            self.free(event)
+            return "<Job {} finalizado!><CPU liberada! {} blocos de memória liberados>".format(event.job.name,
+                                                                                               event.job.memory_needed)
     '''
         Returns next event for job and update job's status
     '''
@@ -377,6 +384,11 @@ class Simulator:
 
         return Event(new_event, event_time, event.job)
 
+    def free (self, event):
+        for i in range(event.job.start_memory, event.job.memory_needed):
+            self.memory_blocks[i] = 1
+        self.memory_avaliable += event.job.memory_needed
+
     def malloc(self, event):
         # verifica se existe memoria disponivel
         # politica de alocacao de first fit (busca gulosa)
@@ -393,6 +405,7 @@ class Simulator:
                         # encontrou memoria
                         if debug:
                             print("Encontrou bloco de memoria iniciando em %d" % iaux_2)
+                        event.job.start_memory = iaux_2
                         # marca bloco como ocupado
                         for i in range(iaux_2, iaux_2+event.job.memory_needed):
                             self.memory_blocks[i] = 1
