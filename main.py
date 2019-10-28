@@ -4,7 +4,7 @@ import numpy as np
 import csv
 
 # debug variables
-debug = True
+debug = False
 ''' one event is related to one job
  only dumps event and job information
 '''
@@ -286,8 +286,8 @@ class Simulator:
                 if debug:
                     print("Saida disponivel disponivel")
                 self.output_avaliable -= 1
-                self.event_queue.put(Event('libera_saida', self.t_current + event.job.input_interval, event.job))
-                return "<Job {} ganhou acesso a saida><CPU liberada, saida alocada>".format(event.job.name)
+                self.event_queue.put(Event('libera_saida', self.t_current + event.job.output_time, event.job))
+                return "<Job {} ganhou acesso a saida por {} s><CPU liberada, saida alocada>".format(event.job.name, event.job.output_time)
             else:
                 self.output_queue.put(event)
                 return "<Job {} nao pode acessar entrada><Job adicionado a fila de entrada>".format(event.job.name)
@@ -301,7 +301,7 @@ class Simulator:
                 self.event_queue.put(self.output_queue.get())
             # recoloca job na readylist
             self.event_queue.put(Event('requisita_cpu', self.t_current, event.job))
-            return "<JOB {} devolveu saida> <JOB recolocado na readylist>"
+            return "<JOB {} devolveu saida> <JOB recolocado na readylist>".format(event.job.name)
 
         elif event.name == 'finaliza_processamento':
             # devolve CPU
