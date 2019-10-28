@@ -10,7 +10,7 @@ debug = False
 '''
 def dump_event(event, simulator):
     print("-------------------------------------------------------------------")
-    print("Event Info")
+    # print("Event Info")
     print("<%d> <%s> <%s> " % (simulator.t_current, event.name, event.job.name))
 
 
@@ -120,7 +120,7 @@ class Simulator:
                 self.t_current += 1
             dump_event(event, self)
             result = self.treat_event(event)
-            print("Resultado da alteracao")
+            # print("Resultado da alteracao")
             print(result)
 
     def treat_event(self, event):
@@ -384,10 +384,12 @@ class Simulator:
 
         return Event(new_event, event_time, event.job)
 
-    def free (self, event):
+    def free(self, event):
         for i in range(event.job.start_memory, event.job.memory_needed):
-            self.memory_blocks[i] = 1
+            self.memory_blocks[i] = 0
         self.memory_avaliable += event.job.memory_needed
+        if not self.memory_queue.empty():
+            self.event_queue.put(self.memory_queue.get())
 
     def malloc(self, event):
         # verifica se existe memoria disponivel
@@ -398,7 +400,6 @@ class Simulator:
             iaux = 0
             memory_space = 0
             while iaux < len(self.memory_blocks):
-                iaux += 1
                 if self.memory_blocks[iaux] == 0:
                     memory_space += 1
                     if memory_space >= event.job.memory_needed:
@@ -421,6 +422,8 @@ class Simulator:
                         return False
                     iaux -= 1
                     iaux_2 = iaux
+                    pass
+                iaux += 1
 
 
 def main():
