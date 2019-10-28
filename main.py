@@ -87,7 +87,7 @@ class Simulator:
         self.output_avaliable = 2
         self.disk_avaliable = 1
         print("Dump no formato")
-        print("<Instante> <Tipo de Evento> <Programa> <Ação> <Resultado>")
+        print("<Instante> <Tipo de Evento> <Programa> <Acão> <Resultado>")
 
     def __initial_events(self, file_name):
         # todo adicionar leitura de CSV
@@ -96,7 +96,7 @@ class Simulator:
                 csv_reader = csv.reader(csv_file, delimiter=',')
                 line_count = 0
                 for row in csv_reader:
-                    # primeira linha é o cabeçalho
+                    # primeira linha é o cabecalho
                     if line_count > 0:
                         new_job = Job(row[0], row[1], row[2], row[3], row[4], row[5], row[6],
                                       row[7], row[8], row[9], row[10], row[11], row[12])
@@ -125,17 +125,18 @@ class Simulator:
 
     def treat_event(self, event):
         if event.name == 'entrada':
+            #aloca memoria 
             if self.malloc(event):
                 if debug:
-                    print("Há memoria para o programa")
+                    print("Ha memoria para o programa")
                 self.event_queue.put(Event('requisita_cpu', self.t_current, event.job))
                 # adiciona proximo evento
 
-                return "<Job {} adicionado como evento de requisicao de CPU>".format(event.name)
+                return "<Job {} adicionado como evento de requisicao de CPU><Requisicao de CPU em {}>".format(event.name, event.time)
             else:
                 self.memory_queue.put(event)
                 if debug:
-                    print("Não há memória")
+                    print("Não ha memoria")
             # atualiza horario da simulacao
             if self.t_current < event.time:
                 # não retrocede o relogio
@@ -144,24 +145,30 @@ class Simulator:
 
         elif event.name == 'requisita_cpu':
             if self.cpu_avaliable > 0:
-                # determina qual o primeiro evento de entrada e saida sera realizado
-                next_event = self.return_next_event(event)
-                self.event_queue.put(next_event)
-                # atualiza tempo corrente 
-                event.job.cpu_gained = self.t_current
-                # diminui o número de cpus
-                self.cpu_avaliable -= 1
                 if self.t_current < event.time:
                     # não retrocede o relogio
                     self.t_current = event.time
-                return "<Evento {} na fila><CPU alocada para o JOB {}>".format(event.name, event.job.name)
+                # atualiza tempo corrente 
+                event.job.cpu_gained = self.t_current
+                # atualiza requisicoes de recursos
+                event.job.next_input = self.t_current + event.job.input_interval
+                event.job.next_output = self.t_current + event.job.output_interval
+                event.job.next_disk = self.t_current + event.job.disk_interval
+                if debug:
+                    print("CPU gained at {}".format(event.job.cpu_gained))
+                # determina qual o primeiro evento de entrada e saida sera realizado
+                next_event = self.return_next_event(event)
+                self.event_queue.put(next_event)
+                # diminui o número de cpus
+                self.cpu_avaliable -= 1
+                return "<Evento {} na fila em {}s><CPU alocada para o JOB {}>".format(next_event.name, next_event.time, event.job.name)
             else:
                 # coloca job na ready list
                 self.cpu_queue.put(event)
                 if self.t_current < event.time:
                     # não retrocede o relogio
                     self.t_current = event.time
-                return "<Não há CPU disponível para a execução de {}> <JOB colocado na fila de cpu>".format(event.job.name)
+                return "<Não ha CPU disponível para a execucão de {}> <JOB colocado na fila de cpu>".format(event.job.name)
 
         elif event.name == 'requisita_disco':
             # libera CPU
@@ -170,12 +177,14 @@ class Simulator:
                 if debug:
                     print("Job recolocado na fila")
                 self.event_queue.put(self.cpu_queue.get())
-            # atualiza tempo da simulação
+            # atualiza tempo da simulacão
             if self.t_current < event.time:
                 # não retrocede o relogio
                 self.t_current = event.time
             # atualiza tempo de cpu do job
             event.job.cpu_time -= self.t_current - event.job.cpu_gained
+            if debug:
+                print("Job gained {} cpu time".format(self.t_current - event.job.cpu_gained))
             if event.job.cpu_time < 0:
                 event.job.cpu_time = 0
 
@@ -207,7 +216,7 @@ class Simulator:
                 if debug:
                     print("Job recolocado na fila")
                 self.event_queue.put(self.cpu_queue.get())
-            # atualiza tempo da simulação
+            # atualiza tempo da simulacão
             if self.t_current < event.time:
                 # não retrocede o relogio
                 self.t_current = event.time
@@ -215,7 +224,10 @@ class Simulator:
             event.job.cpu_time -= self.t_current - event.job.cpu_gained
             if event.job.cpu_time < 0:
                 event.job.cpu_time = 0
-
+            
+            if debug:
+                print("Job gained {} cpu time.\r\nMissing {} cpu time".format(self.t_current - event.job.cpu_gained, event.job.cpu_time))
+            
             if self.input_avaliable > 0:
                 if debug:
                     print("Entrada disponível disponivel")
@@ -235,7 +247,7 @@ class Simulator:
                 self.event_queue.put(self.input_queue.get())
             # recoloca job na readylist
             self.event_queue.put(Event('requisita_cpu', self.t_current, event.job))
-            return "<JOB {} devolveu disco> <JOB recolocado na readylist>"
+            return "<JOB {} devolveu disco> <JOB recolocado na readylist>".format(event.job.name)
         elif event.name == 'requisita_saida':
             # libera CPU
             self.cpu_avaliable += 1
@@ -243,7 +255,7 @@ class Simulator:
                 if debug:
                     print("Job recolocado na fila")
                 self.event_queue.put(self.cpu_queue.get())
-            # atualiza tempo da simulação
+            # atualiza tempo da simulacão
             if self.t_current < event.time:
                 # não retrocede o relogio
                 self.t_current = event.time
@@ -281,13 +293,12 @@ class Simulator:
             if not self.cpu_queue.empty():
                 self.event_queue.put(self.cpu_queue.get())
             self.free(event)
-            return "<Job {} finalizado!><CPU liberada! {} blocos de memória liberados>".format(event.job.name,
+            return "<Job {} finalizado!><CPU liberada! {} blocos de memoria liberados>".format(event.job.name,
                                                                                                event.job.memory_needed)
     '''
         Returns next event for job and update job's status
     '''
-    @staticmethod
-    def return_next_event(event):
+    def return_next_event(self, event):
         if event.job.disk_needed > 0 and event.job.input_needed > 0 and event.job.output_needed > 0:
             if event.job.next_input < event.job.next_output:
                 if event.job.next_input < event.job.next_disk:
@@ -295,26 +306,26 @@ class Simulator:
                     event_time = event.job.next_input
                     event.job.input_needed -= 1
                     if event.job.input_needed > 0:
-                        event.job.next_input = event.time + event.job.input_interval
+                        event.job.next_input = self.t_current + event.job.input_interval
                 else:
                     new_event = 'requisita_disco'
                     event_time = event.job.next_disk
                     event.job.disk_needed -= 1
                     if event.job.disk_needed > 0:
-                        event.job.next_disk = event.time + event.job.disk_interval
+                        event.job.next_disk = self.t_current + event.job.disk_interval
             else:
                 if event.job.next_output < event.job.next_disk:
                     new_event = 'requisita_saida'
                     event_time = event.job.next_output
                     event.job.output_needed -= 1
                     if event.job.output_needed > 0:
-                        event.job.next_output = event.time + event.job.output_interval
+                        event.job.next_output = self.t_current + event.job.output_interval
                 else:
                     new_event = 'requisita_disco'
                     event_time = event.job.next_disk
                     event.job.disk_needed -= 1
                     if event.job.disk_needed > 0:
-                        event.job.next_disk = event.time + event.job.disk_interval
+                        event.job.next_disk = self.t_current + event.job.disk_interval
         elif event.job.input_needed > 0 and event.job.output_needed > 0:
 
             if event.job.next_input < event.job.next_output:
@@ -322,13 +333,13 @@ class Simulator:
                 event_time = event.job.next_input
                 event.job.input_needed -= 1
                 if event.job.input_needed > 0:
-                    event.job.next_input = event.time + event.job.input_interval
+                    event.job.next_input = self.t_current + event.job.input_interval
             else:
                 new_event = 'requisita_saida'
                 event_time = event.job.next_output
                 event.job.output_needed -= 1
                 if event.job.output_needed > 0:
-                    event.job.next_output = event.time + event.job.output_interval
+                    event.job.next_output = self.t_current + event.job.output_interval
 
         elif event.job.input_needed > 0 and event.job.disk_needed > 0:
             if event.job.next_input < event.job.next_disk:
@@ -336,13 +347,13 @@ class Simulator:
                 event_time = event.job.next_input
                 event.job.input_needed -= 1
                 if event.job.input_needed > 0:
-                    event.job.next_input = event.time + event.job.input_interval
+                    event.job.next_input = self.t_current + event.job.input_interval
             else:
                 new_event = 'requisita_disco'
                 event_time = event.job.next_disk
                 event.job.disk_needed -= 1
                 if event.job.disk_needed > 0:
-                    event.job.next_disk = event.time + event.job.disk_interval
+                    event.job.next_disk = self.t_current + event.job.disk_interval
 
         elif event.job.disk_needed > 0 and event.job.output_needed > 0:
             if event.job.next_disk < event.job.next_output:
@@ -350,37 +361,37 @@ class Simulator:
                 event_time = event.job.next_disk
                 event.job.disk_needed -= 1
                 if event.job.disk_needed > 0:
-                    event.job.next_disk = event.time + event.job.disk_interval
+                    event.job.next_disk = self.t_current + event.job.disk_interval
             else:
                 new_event = 'requisita_saida'
                 event_time = event.job.next_output
                 event.job.output_needed -= 1
                 if event.job.output_needed > 0:
-                    event.job.next_output = event.time + event.job.output_interval
+                    event.job.next_output = self.t_current + event.job.output_interval
 
         elif event.job.input_needed > 0:
             new_event = 'requisita_entrada'
             event_time = event.job.next_input
             event.job.input_needed -= 1
             if event.job.input_needed > 0:
-                event.job.next_input = event.time + event.job.input_interval
+                event.job.next_input = self.t_current + event.job.input_interval
 
         elif event.job.output_needed > 0:
             new_event = 'requisita_saida'
             event_time = event.job.next_output
             event.job.output_needed -= 1
             if event.job.output_needed > 0:
-                event.job.next_output = event.time + event.job.output_interval
+                event.job.next_output = self.t_current + event.job.output_interval
 
         elif event.job.disk_needed > 0:
             new_event = 'requisita_disco'
             event_time = event.job.next_disk
             event.job.disk_needed -= 1
             if event.job.disk_needed > 0:
-                event.job.next_disk = event.time + event.job.disk_interval
+                event.job.next_disk = self.t_current + event.job.disk_interval
         else: # fim da execucao
             new_event = 'finaliza_processamento'
-            event_time = event.time + event.job.cpu_time
+            event_time = self.t_current + event.job.cpu_time
 
         return Event(new_event, event_time, event.job)
 
@@ -413,12 +424,12 @@ class Simulator:
                         self.memory_avaliable -= event.job.memory_needed
                         return True
                 else:
-                    # Avança iAux até proxima posicao livre
+                    # Avanca iAux até proxima posicao livre
                     while iaux < len(self.memory_blocks) and self.memory_blocks[iaux] == 1:
                         iaux += 1
                     if iaux == len(self.memory_blocks):
                         if debug:
-                            print("Não há memória disponível")
+                            print("Não ha memoria disponível")
                         return False
                     iaux -= 1
                     iaux_2 = iaux
@@ -427,13 +438,13 @@ class Simulator:
 
 
 def main():
-    # coleta dados dos usuários
-    ti = input("Tempo inicial de relógio")
-    tf = input("Tempo final da simulação")
-    fila_name = input("Nome dos arquivos")
+    # coleta dados dos usuarios
+    ti = input("Tempo inicial de relogio: ")
+    tf = input("Tempo final da simulacão: ")
+    fila_name = input("Nome do arquivo: ")
     simulator = Simulator(ti, tf, file_name=fila_name)
     simulator.run()
-    print("simulação chegou ao fim")
+    print("simulacão chegou ao fim")
 
 
 if __name__ == '__main__':
