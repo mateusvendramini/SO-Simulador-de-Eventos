@@ -87,7 +87,7 @@ class Simulator:
         self.output_avaliable = 2
         self.disk_avaliable = 1
         print("Dump no formato")
-        print("<Instante> <Tipo de Evento> <Programa> <Acão> <Resultado>")
+        print("<Instante> <Tipo de Evento> <Programa> <Acao> <Resultado>")
 
     def __initial_events(self, file_name):
         # todo adicionar leitura de CSV
@@ -116,7 +116,7 @@ class Simulator:
             if self.t_current < event.time:
                 self.t_current = event.time
             else:
-                # não processa mais de um evento por vez
+                # nao processa mais de um evento por vez
                 self.t_current += 1
             dump_event(event, self)
             result = self.treat_event(event)
@@ -136,17 +136,17 @@ class Simulator:
             else:
                 self.memory_queue.put(event)
                 if debug:
-                    print("Não ha memoria")
+                    print("Nao ha memoria")
             # atualiza horario da simulacao
             if self.t_current < event.time:
-                # não retrocede o relogio
+                # nao retrocede o relogio
                 self.t_current = event.time
             return "<Coloca job {} na fila de memoria> <Fila atualizada>".format(event.job.name)
 
         elif event.name == 'requisita_cpu':
             if self.cpu_avaliable > 0:
                 if self.t_current < event.time:
-                    # não retrocede o relogio
+                    # nao retrocede o relogio
                     self.t_current = event.time
                 # atualiza tempo corrente 
                 event.job.cpu_gained = self.t_current
@@ -166,9 +166,9 @@ class Simulator:
                 # coloca job na ready list
                 self.cpu_queue.put(event)
                 if self.t_current < event.time:
-                    # não retrocede o relogio
+                    # nao retrocede o relogio
                     self.t_current = event.time
-                return "<Não ha CPU disponível para a execucão de {}> <JOB colocado na fila de cpu>".format(event.job.name)
+                return "<Nao ha CPU disponível para a execucao de {}> <JOB colocado na fila de cpu>".format(event.job.name)
 
         elif event.name == 'requisita_disco':
             # libera CPU
@@ -177,9 +177,9 @@ class Simulator:
                 if debug:
                     print("Job recolocado na fila")
                 self.event_queue.put(self.cpu_queue.get())
-            # atualiza tempo da simulacão
+            # atualiza tempo da simulacao
             if self.t_current < event.time:
-                # não retrocede o relogio
+                # nao retrocede o relogio
                 self.t_current = event.time
             # atualiza tempo de cpu do job
             event.job.cpu_time -= self.t_current - event.job.cpu_gained
@@ -196,7 +196,7 @@ class Simulator:
                 return "<Job {} ganhou acesso ao disco> <CPU liberada, disco alocado>".format(event.job.name)
             else:
                 self.disk_queue.put(event)
-                return "<Job {} não pode acessar disco><Job adicionado a fila de disco>".format(event.job.name)
+                return "<Job {} nao pode acessar disco><Job adicionado a fila de disco>".format(event.job.name)
 
         elif event.name == 'libera_disco':
             self.disk_avaliable += 1
@@ -216,9 +216,9 @@ class Simulator:
                 if debug:
                     print("Job recolocado na fila")
                 self.event_queue.put(self.cpu_queue.get())
-            # atualiza tempo da simulacão
+            # atualiza tempo da simulacao
             if self.t_current < event.time:
-                # não retrocede o relogio
+                # nao retrocede o relogio
                 self.t_current = event.time
             # atualiza tempo de cpu do job
             event.job.cpu_time -= self.t_current - event.job.cpu_gained
@@ -236,7 +236,7 @@ class Simulator:
                 return "<Job {} ganhou acesso a entrada><CPU liberada, entrada alocada>".format(event.job.name)
             else:
                 self.input_queue.put(event)
-                return "<Job {0} não pode acessar entrada><Job adicionado a fila de entrada>".format(event.job.name)
+                return "<Job {0} nao pode acessar entrada><Job adicionado a fila de entrada>".format(event.job.name)
 
         elif event.name == 'libera_entrada':
             self.input_avaliable += 1
@@ -255,9 +255,9 @@ class Simulator:
                 if debug:
                     print("Job recolocado na fila")
                 self.event_queue.put(self.cpu_queue.get())
-            # atualiza tempo da simulacão
+            # atualiza tempo da simulacao
             if self.t_current < event.time:
-                # não retrocede o relogio
+                # nao retrocede o relogio
                 self.t_current = event.time
             # atualiza tempo de cpu do job
             event.job.cpu_time -= self.t_current - event.job.cpu_gained
@@ -272,7 +272,7 @@ class Simulator:
                 return "<Job {} ganhou acesso a saida><CPU liberada, saida alocada>".format(event.job.name)
             else:
                 self.output_queue.put(event)
-                return "<Job {} não pode acessar entrada><Job adicionado a fila de entrada>".format(event.job.name)
+                return "<Job {} nao pode acessar entrada><Job adicionado a fila de entrada>".format(event.job.name)
 
         elif event.name == 'libera_saida':
             self.output_avaliable += 1
@@ -406,7 +406,7 @@ class Simulator:
         # verifica se existe memoria disponivel
         # politica de alocacao de first fit (busca gulosa)
         if self.memory_avaliable > event.job.memory_needed:
-            # verifica se existe uma região contigua de memoria para o processo
+            # verifica se existe uma regiao contigua de memoria para o processo
             iaux_2 = 0
             iaux = 0
             memory_space = 0
@@ -429,7 +429,7 @@ class Simulator:
                         iaux += 1
                     if iaux == len(self.memory_blocks):
                         if debug:
-                            print("Não ha memoria disponível")
+                            print("Nao ha memoria disponível")
                         return False
                     iaux -= 1
                     iaux_2 = iaux
@@ -440,11 +440,11 @@ class Simulator:
 def main():
     # coleta dados dos usuarios
     ti = input("Tempo inicial de relogio: ")
-    tf = input("Tempo final da simulacão: ")
+    tf = input("Tempo final da simulacao: ")
     fila_name = input("Nome do arquivo: ")
     simulator = Simulator(ti, tf, file_name=fila_name)
     simulator.run()
-    print("simulacão chegou ao fim")
+    print("simulacao chegou ao fim")
 
 
 if __name__ == '__main__':
