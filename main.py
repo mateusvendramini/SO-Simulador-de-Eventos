@@ -4,7 +4,7 @@ import numpy as np
 import csv
 
 # debug variables
-debug = False
+debug = True
 ''' one event is related to one job
  only dumps event and job information
 '''
@@ -64,6 +64,7 @@ class Job:
         self.cpu_time = int(cpu_time)
         self.cpu_gained = 0
         self.start_memory = 0
+        self.IsActive = False
 
 
 class Simulator:
@@ -98,6 +99,10 @@ class Simulator:
                 for row in csv_reader:
                     # primeira linha é o cabecalho
                     if line_count > 0:
+                        if debug:
+                            print("Line name{} memory_needed {} input_needed {} output_needed{} input_interval{} output_interval{} initial_time{} input_time{} output_time{} disk_needed{} disk_interval {} disk_time {} cpu_time{} ".format(row[0], row[1], row[2], row[3], row[4], row[5], row[6],
+                                      row[7], row[8], row[9], row[10], row[11], row[12]));
+                                      
                         new_job = Job(row[0], row[1], row[2], row[3], row[4], row[5], row[6],
                                       row[7], row[8], row[9], row[10], row[11], row[12])
                         new_event = Event('entrada', new_job.initial_time, new_job)
@@ -161,32 +166,37 @@ class Simulator:
                 self.event_queue.put(next_event)
                 # diminui o número de cpus
                 self.cpu_avaliable -= 1
+                next_event.job.IsActive = True
                 return "<Evento {} na fila em {}s><CPU alocada para o JOB {}>".format(next_event.name, next_event.time, event.job.name)
             else:
                 # coloca job na ready list
                 self.cpu_queue.put(event)
+                event.job.IsActive = False
                 if self.t_current < event.time:
                     # nao retrocede o relogio
                     self.t_current = event.time
-                return "<Nao ha CPU disponível para a execucao de {}> <JOB colocado na fila de cpu>".format(event.job.name)
+                return "<Nao ha CPU disponivel para a execucao de {}> <JOB colocado na fila de cpu>".format(event.job.name)
 
         elif event.name == 'requisita_disco':
             # libera CPU
-            self.cpu_avaliable += 1
-            if not self.cpu_queue.empty():
-                if debug:
-                    print("Job recolocado na fila")
-                self.event_queue.put(self.cpu_queue.get())
+            if event.job.IsActive:
+                self.cpu_avaliable += 1
+                if not self.cpu_queue.empty():
+                    if debug:
+                        print("Job recolocado na fila")
+                    self.event_queue.put(self.cpu_queue.get())
             # atualiza tempo da simulacao
             if self.t_current < event.time:
                 # nao retrocede o relogio
                 self.t_current = event.time
             # atualiza tempo de cpu do job
-            event.job.cpu_time -= self.t_current - event.job.cpu_gained
-            if debug:
-                print("Job gained {} cpu time".format(self.t_current - event.job.cpu_gained))
-            if event.job.cpu_time < 0:
-                event.job.cpu_time = 0
+            if event.job.IsActive:
+                event.job.IsActive = False
+                event.job.cpu_time -= self.t_current - event.job.cpu_gained
+                if debug:
+                    print("Job gained {} cpu time".format(self.t_current - event.job.cpu_gained))
+                if event.job.cpu_time < 0:
+                    event.job.cpu_time = 0
 
             if self.disk_avaliable > 0:
                 if debug:
@@ -211,29 +221,33 @@ class Simulator:
 
         elif event.name == 'requisita_entrada':
             # libera CPU
-            self.cpu_avaliable += 1
-            if not self.cpu_queue.empty():
-                if debug:
-                    print("Job recolocado na fila")
-                self.event_queue.put(self.cpu_queue.get())
+            if event.job.IsActive:
+                self.cpu_avaliable += 1
+                if not self.cpu_queue.empty():
+                    if debug:
+                        print("Job recolocado na fila")
+                    self.event_queue.put(self.cpu_queue.get())
             # atualiza tempo da simulacao
             if self.t_current < event.time:
                 # nao retrocede o relogio
                 self.t_current = event.time
-            # atualiza tempo de cpu do job
-            event.job.cpu_time -= self.t_current - event.job.cpu_gained
-            if event.job.cpu_time < 0:
-                event.job.cpu_time = 0
+            if event.job.IsActive:
+                # atualiza tempo de cpu do job
+                event.job.cpu_time -= self.t_current - event.job.cpu_gained
+                event.job.IsActive = False
+                if event.job.cpu_time < 0:
+                    event.job.cpu_time = 0
             
-            if debug:
-                print("Job gained {} cpu time.\r\nMissing {} cpu time".format(self.t_current - event.job.cpu_gained, event.job.cpu_time))
+                if debug:
+                    print("Job gained {} cpu time.\r\nMissing {} cpu time".format(self.t_current - event.job.cpu_gained, event.job.cpu_time))
             
             if self.input_avaliable > 0:
                 if debug:
-                    print("Entrada disponível disponivel")
+                    print("Entrada disponivel disponivel")
                 self.input_avaliable -= 1
-                self.event_queue.put(Event('libera_entrada', self.t_current + event.job.input_interval, event.job))
-                return "<Job {} ganhou acesso a entrada><CPU liberada, entrada alocada>".format(event.job.name)
+                next_event = Event('libera_entrada', self.t_current + event.job.input_time, event.job)
+                self.event_queue.put(next_event)
+                return "<Job {} ganhou acesso a entrada {} ate {}><CPU liberada, entrada alocada>".format(event.job.name, self.input_avaliable, next_event.time)
             else:
                 self.input_queue.put(event)
                 return "<Job {0} nao pode acessar entrada><Job adicionado a fila de entrada>".format(event.job.name)
@@ -247,26 +261,30 @@ class Simulator:
                 self.event_queue.put(self.input_queue.get())
             # recoloca job na readylist
             self.event_queue.put(Event('requisita_cpu', self.t_current, event.job))
-            return "<JOB {} devolveu disco> <JOB recolocado na readylist>".format(event.job.name)
+            return "<JOB {} devolveu entrada> <JOB recolocado na readylist>".format(event.job.name)
         elif event.name == 'requisita_saida':
             # libera CPU
-            self.cpu_avaliable += 1
-            if not self.cpu_queue.empty():
-                if debug:
-                    print("Job recolocado na fila")
-                self.event_queue.put(self.cpu_queue.get())
+            if event.job.IsActive:
+                self.cpu_avaliable += 1
+                if not self.cpu_queue.empty():
+                    if debug:
+                        print("Job recolocado na fila")
+                    self.event_queue.put(self.cpu_queue.get())
+                    
             # atualiza tempo da simulacao
             if self.t_current < event.time:
                 # nao retrocede o relogio
                 self.t_current = event.time
             # atualiza tempo de cpu do job
-            event.job.cpu_time -= self.t_current - event.job.cpu_gained
-            if event.job.cpu_time < 0:
-                event.job.cpu_time = 0
+            if event.job.IsActive:
+                event.job.IsActive = False
+                event.job.cpu_time -= self.t_current - event.job.cpu_gained
+                if event.job.cpu_time < 0:
+                    event.job.cpu_time = 0
 
             if self.output_avaliable > 0:
                 if debug:
-                    print("Saida disponível disponivel")
+                    print("Saida disponivel disponivel")
                 self.output_avaliable -= 1
                 self.event_queue.put(Event('libera_saida', self.t_current + event.job.input_interval, event.job))
                 return "<Job {} ganhou acesso a saida><CPU liberada, saida alocada>".format(event.job.name)
@@ -429,7 +447,7 @@ class Simulator:
                         iaux += 1
                     if iaux == len(self.memory_blocks):
                         if debug:
-                            print("Nao ha memoria disponível")
+                            print("Nao ha memoria disponivel")
                         return False
                     iaux -= 1
                     iaux_2 = iaux
