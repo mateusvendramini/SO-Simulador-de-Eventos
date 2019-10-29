@@ -202,8 +202,8 @@ class Simulator:
                 if debug:
                     print("Disco disponivel")
                 self.disk_avaliable -= 1
-                self.event_queue.put(Event('libera_disco', self.t_current + event.job.disk_interval, event.job))
-                return "<Job {} ganhou acesso ao disco> <CPU liberada, disco alocado>".format(event.job.name)
+                self.event_queue.put(Event('libera_disco', self.t_current + event.job.disk_time, event.job))
+                return "<Job {} ganhou acesso ao disco ate {}> <CPU liberada, disco alocado>".format(event.job.name, self.t_current + event.job.disk_time)
             else:
                 self.disk_queue.put(event)
                 return "<Job {} nao pode acessar disco><Job adicionado a fila de disco>".format(event.job.name)
