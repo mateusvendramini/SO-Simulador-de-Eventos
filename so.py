@@ -63,9 +63,12 @@ class Job:
                 request.job.is_sleeping = False
                 simulator.event_queue.put(Event('entrada', simulator.t_current, request.job))
             elif request.name == 'adormece':
-                request.job.is_sleeping = False
-            else:
                 request.job.is_sleeping = True
+            else:
+                request.job.is_sleeping = False
+                if request.job.wakeup_event is not None:
+                   simulator.event_queue.put(request.job.wakeup_event)
+                   request.job.wakeup_event = None
 
 
 class JobSegment:
@@ -92,6 +95,8 @@ class JobSegment:
         self.start_memory = 0
         self.IsActive = False
         self.father_job = father_job
+        self.is_sleeping = False
+        self.wakeup_event = None
 
 
 class Simulator:
@@ -197,6 +202,10 @@ class Simulator:
 
     def treat_event(self, event):
         if event.name == 'entrada':
+            # verifica se o Job está dormindo
+            if event.job.is_sleeping:
+                event.job.wakeup_event = event
+                return "<Job {} dormindo><Removido da lista de entrada>".format(event.job.name)
             # aloca memoria
             if self.malloc(event):
                 if debug:
@@ -221,6 +230,10 @@ class Simulator:
                 if self.t_current < event.time:
                     # nao retrocede o relogio
                     self.t_current = event.time
+                # verifica se o Job está dormindo
+                if event.job.is_sleeping:
+                    event.job.wakeup_event = event
+                    return "<Job {} dormindo><Removido da lista de entrada>".format(event.job.name)
                 # atualiza tempo corrente
                 event.job.cpu_gained = self.t_current
                 # atualiza requisicoes de recursos
@@ -238,17 +251,26 @@ class Simulator:
                 return "<Evento {} na fila em {}s><CPU alocada para o JOB {}>".format(next_event.name, next_event.time,
                                                                                       event.job.name)
             else:
-                # coloca job na ready list
-                self.cpu_queue.put(event)
-                event.job.IsActive = False
                 if self.t_current < event.time:
                     # nao retrocede o relogio
                     self.t_current = event.time
+                # verifica se o Job está dormindo
+                if event.job.is_sleeping:
+                    event.job.wakeup_event = event
+                    return "<Job {} dormindo><Removido da lista de entrada>".format(event.job.name)
+                    
+                # coloca job na ready list
+                self.cpu_queue.put(event)
+                event.job.IsActive = False
                 return "<Nao ha CPU disponivel para a execucao de {}> <JOB colocado na fila de cpu>".format(
                     event.job.name)
 
         elif event.name == 'requisita_disco':
             # libera CPU
+            # verifica se o Job está dormindo
+            if event.job.is_sleeping:
+                event.job.wakeup_event = event
+                return "<Job {} dormindo><Removido da lista de entrada>".format(event.job.name)
             if event.job.IsActive:
                 self.cpu_avaliable += 1
                 if not self.cpu_queue.empty():
@@ -296,6 +318,10 @@ class Simulator:
             return "<JOB {} devolveu disco> <JOB recolocado na readylist>".format(event.name)
 
         elif event.name == 'requisita_entrada':
+            # verifica se o Job está dormindo
+            if event.job.is_sleeping:
+                event.job.wakeup_event = event
+                return "<Job {} dormindo><Removido da lista de entrada>".format(event.job.name)
             # libera CPU
             if event.job.IsActive:
                 self.cpu_avaliable += 1
