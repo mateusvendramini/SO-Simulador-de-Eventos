@@ -4,7 +4,7 @@ import numpy as np
 import csv
 
 # debug variables
-debug = False
+debug = True
 ''' one event is related to one job
  only dumps event and job information
 '''
@@ -55,8 +55,11 @@ class Job:
         self.internal_time = 0
 
     def schedule_next_event(self, simulator):
-        while self.segment_queue.queue[0].time < self.internal_time:
+        print("Tempo do evento {} Tempo atual {}".format(self.segment_queue.queue[0].time, self.internal_time))
+        while self.segment_queue.queue[0].time <= self.internal_time:
+            print("Disparando evento")
             request = self.segment_queue.get()
+            print(request.name)
             # determina tipo de evento
             if request.name == 'referencia':
                 # cria evento de requisicao de memoria
@@ -424,6 +427,10 @@ class Simulator:
             if not self.cpu_queue.empty():
                 self.event_queue.put(self.cpu_queue.get())
             self.free(event)
+            # atualiza estado do Job pai
+            event.job.father_job.internal_time += event.job.cpu_time
+            event.job.father_job.schedule_next_event(self)
+            event.job.cpu_time = 0
             return "<Job {} finalizado!><CPU liberada! {} blocos de memoria liberados>".format(event.job.name,
                                                                                                event.job.memory_needed)
 
