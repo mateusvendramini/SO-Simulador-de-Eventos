@@ -46,8 +46,31 @@ class Event:
 
 
 class Job:
+    def __init__(self, job_name):
+        self.segment_list = []
+        self.segment_queue = PriorityQueue()
+        # list of truples with (segment_id, (start_address, end_address))
+        self.memory_partitions = []
+        self.name = job_name
+        self.internal_time = 0
+
+    def schedule_next_event(self, simulator):
+        while self.segment_queue.queue[0].time < self.internal_time:
+            request = self.segment_queue.get()
+            # determina tipo de evento
+            if request.name == 'referencia':
+                # cria evento de requisicao de memoria
+                request.job.is_sleeping = False
+                simulator.event_queue.put(Event('entrada', simulator.t_current, request.job))
+            elif request.name == 'adormece':
+                request.job.is_sleeping = False
+            else:
+                request.job.is_sleeping = True
+
+
+class JobSegment:
     def __init__(self, name, memory_needed, input_needed, output_needed, input_interval, output_interval, initial_time,
-                 input_time, output_time, disk_needed, disk_interval, disk_time, cpu_time=0):
+                 input_time, output_time, disk_needed, disk_interval, disk_time, cpu_time=0, father_job=None):
         self.name = name
         self.memory_needed = int(memory_needed)
         self.input_needed = int(input_needed)
@@ -68,6 +91,7 @@ class Job:
         self.cpu_gained = 0
         self.start_memory = 0
         self.IsActive = False
+        self.father_job = father_job
 
 
 class Simulator:
@@ -76,6 +100,8 @@ class Simulator:
         self.tf = int(tf)
         self.t_current = 0
         self.event_queue = PriorityQueue()
+        # adiciona lista de Jobs
+        self.job_list = []
         self.__initial_events(file_name)
         # recursos
         self.memory_queue = Queue()
@@ -90,6 +116,7 @@ class Simulator:
         self.output_queue = Queue()
         self.output_avaliable = 2
         self.disk_avaliable = 1
+        self.is_sleeping = False
         print("Dump no formato")
         print("<Instante> <Tipo de Evento> <Programa> <Acao> <Resultado>")
 
@@ -98,6 +125,8 @@ class Simulator:
             with open(file_name) as csv_file:
                 csv_reader = csv.reader(csv_file, delimiter=',')
                 line_count = 0
+                old_job = ""
+                job = None
                 for row in csv_reader:
                     # primeira linha é o cabecalho
                     if line_count > 0:
@@ -106,18 +135,52 @@ class Simulator:
                                 "Line name{} memory_needed {} input_needed {} output_needed{} input_interval{} output_interval{} initial_time{} input_time{} output_time{} disk_needed{} disk_interval {} disk_time {} cpu_time{} ".format(
                                     row[0], row[1], row[2], row[3], row[4], row[5], row[6],
                                     row[7], row[8], row[9], row[10], row[11], row[12]));
-
-                        new_job = Job(row[0], row[1], row[2], row[3], row[4], row[5], row[6],
-                                      row[7], row[8], row[9], row[10], row[11], row[12])
-                        new_event = Event('entrada', new_job.initial_time, new_job)
-                        self.event_queue.put(new_event)
-                        if debug:
-                            print("Evento enfileirado: <%s> <%s>" % (new_job.name, new_event.name))
+                        # verifica se é um novo job
+                        if old_job != row[0]:
+                            old_job = row[0]
+                            #coloca primeiro evento de solicitacao de segmento na fila de eventos globais
+                            if job is not None:
+                                self.first_segment(job)
+                            # novo Job foi criado
+                            job = Job(row[0])
+                            # adiciona Job a lista de Jobs do sistema
+                            self.job_list.append(job)
+                            # cria segmento
+                            new_job = JobSegment(row[0], row[1], row[2], row[3], row[4], row[5], row[6],
+                                                 row[7], row[8], row[9], row[10], row[11], row[12], job)
+                            job.segment_list.append(new_job)
+                        else:
+                            # continue preenchendo lista de segmentos
+                            new_job = JobSegment(row[0], row[1], row[2], row[3], row[4], row[5], row[6],
+                                                 row[7], row[8], row[9], row[10], row[11], row[12], job)
+                            job.segment_list.append(new_job)
                     else:
                         line_count = 1
             csv_file.close()
         except:
             print("erro ao ler csv :(")
+
+    def first_segment(self, job):
+        # tenta ler csv
+        try:
+            with open(job.name+".csv") as csv_file:
+                csv_reader = csv.reader(csv_file, delimiter=',')
+                line_count = 0
+                for row in csv_reader:
+                    # primeira linha é o cabecalho
+                    if line_count > 0:
+                        # adiciona evento na fila do Job
+                        job.segment_queue.put(Event(row[0], int(row[1]), job.segment_list[int(row[2])]))
+                    else:
+                    # pula cabeçalho
+                        line_count = 1
+
+                csv_file.close()
+                # coloca primeira solicitação na fila global
+                first_request = job.segment_queue.get()
+                self.event_queue.put(Event('entrada', first_request.time, first_request.job))
+        except:
+            print("Erro lendo fila de inicializacao do job {}").format(job.name)
 
     def run(self):
         while not self.event_queue.empty() and self.t_current < self.tf:
@@ -199,11 +262,16 @@ class Simulator:
             # atualiza tempo de cpu do job
             if event.job.IsActive:
                 event.job.IsActive = False
+                cpu_time_old = event.job.cpu_time
                 event.job.cpu_time -= self.t_current - event.job.cpu_gained
+
                 if debug:
                     print("Job gained {} cpu time".format(self.t_current - event.job.cpu_gained))
                 if event.job.cpu_time < 0:
                     event.job.cpu_time = 0
+                # atualiza estado do Job pai
+                event.job.father_job.internal_time += cpu_time_old - event.job.cpu_time
+                event.job.father_job.schedule_next_event(self)
 
             if self.disk_avaliable > 0:
                 if debug:
@@ -241,10 +309,14 @@ class Simulator:
                 self.t_current = event.time
             if event.job.IsActive:
                 # atualiza tempo de cpu do job
+                cpu_time_old = event.job.cpu_time
                 event.job.cpu_time -= self.t_current - event.job.cpu_gained
                 event.job.IsActive = False
                 if event.job.cpu_time < 0:
                     event.job.cpu_time = 0
+
+                event.job.father_job.internal_time += cpu_time_old - event.job.cpu_time
+                event.job.father_job.schedule_next_event(self)
 
                 if debug:
                     print("Job gained {} cpu time.\r\nMissing {} cpu time".format(self.t_current - event.job.cpu_gained,
@@ -288,9 +360,13 @@ class Simulator:
             # atualiza tempo de cpu do job
             if event.job.IsActive:
                 event.job.IsActive = False
+                cpu_time_old = event.job.cpu_time
                 event.job.cpu_time -= self.t_current - event.job.cpu_gained
                 if event.job.cpu_time < 0:
                     event.job.cpu_time = 0
+
+                event.job.father_job.internal_time += cpu_time_old - event.job.cpu_time
+                event.job.father_job.schedule_next_event(self)
 
             if self.output_avaliable > 0:
                 if debug:

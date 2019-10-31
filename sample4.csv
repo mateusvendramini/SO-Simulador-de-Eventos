@@ -1,0 +1,5 @@
+name,memory_needed,input_needed,output_needed,input_interval,output_interval,initial_time,input_time,output_time,disk_needed,disk_interval,disk_time,cpu_time
+Job1,	100,			0,				0,			0,				0,				0,			0,			0,			1,			0,				5,		10
+Job1,	100,			0,				0,			0,				0,				0,			0,			0,			1,			0,				5,		10
+Job2, 100,			0,				0,			0,				0,				0,			0,			0,			1,			0,				5,		10
+Job2, 50 ,			0,				0,			0,				0,				0,			0,			0,			1,			0,				5,		10
