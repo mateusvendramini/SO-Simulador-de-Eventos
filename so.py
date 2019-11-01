@@ -163,7 +163,7 @@ class Simulator:
                             # adiciona Job a lista de Jobs do sistema
                             self.job_list.append(job)
                             # cria segmento
-                            new_job = JobSegment(row[0], row[1], row[2], row[3], row[4], row[5], row[6],
+                            new_job = JobSegment(row[0]+"segmento {}".format(len(self.job_list)), row[1], row[2], row[3], row[4], row[5], row[6],
                                                  row[7], row[8], row[9], row[10], row[11], row[12], job)
                             job.segment_list.append(new_job)
                         else:
@@ -262,6 +262,8 @@ class Simulator:
                 self.cpu_ocuppied = True
             else:
                 self.cpu_queue.put(next_event)
+                if self.event_queue.empty:
+                    self.event_queue.put(self.cpu_queue.get())
                 #self.event_queue.put(self.cpu_queue.get())
             # diminui o número de cpus
             #self.cpu_avaliable -= 1
@@ -463,7 +465,9 @@ class Simulator:
             # adiciona proximo evento solicitado pelo Job na fila 
             self.cpu_queue.put(self.return_next_event(event))
             # adiciona proximo evento da fila na fila global
-            self.event_queue.put(self.cpu_queue.get())
+            next_event = self.cpu_queue.get()
+            self.event_queue.put(next_event)
+            return "<Contexto mudado><CPU alocada para {}>".format(next_event.job.name)
 
     '''
         Returns next event for job and update job's status
