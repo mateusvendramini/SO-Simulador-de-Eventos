@@ -56,23 +56,29 @@ class Job:
 
     def schedule_next_event(self, simulator):
         print("Tempo do evento {} Tempo atual {}".format(self.segment_queue.queue[0].time, self.internal_time))
-        while self.segment_queue.queue[0].time <= self.internal_time:
-            print("Disparando evento")
-            request = self.segment_queue.get()
-            print(request.name)
-            # determina tipo de evento
-            if request.name == 'referencia':
-                # cria evento de requisicao de memoria
-                request.job.is_sleeping = False
-                simulator.event_queue.put(Event('entrada', simulator.t_current, request.job))
-            elif request.name == 'adormece':
-                request.job.is_sleeping = True
-            else:
-                request.job.is_sleeping = False
-                if request.job.wakeup_event is not None:
-                   simulator.event_queue.put(request.job.wakeup_event)
-                   request.job.wakeup_event = None
-
+        try:
+            while self.segment_queue.queue[0].time <= self.internal_time:
+                print("Disparando evento")
+                request = self.segment_queue.get()
+                print(request.name)
+                # determina tipo de evento
+                if request.name == 'referencia':
+                    # cria evento de requisicao de memoria
+                    request.job.is_sleeping = False
+                    simulator.event_queue.put(Event('entrada', simulator.t_current, request.job))
+                elif request.name == 'adormece':
+                    request.job.is_sleeping = True
+                else:
+                    request.job.is_sleeping = False
+                    if request.job.wakeup_event is not None:
+                       simulator.event_queue.put(request.job.wakeup_event)
+                       request.job.wakeup_event = None
+                try: 
+                    print("Próximo evento {}".format(self.segment_queue.queue[0].time))
+                except:
+                    print("Fila vazia")
+        except:
+            print("Sem evento na fila")
 
 class JobSegment:
     def __init__(self, name, memory_needed, input_needed, output_needed, input_interval, output_interval, initial_time,
@@ -103,7 +109,7 @@ class JobSegment:
 
 
 class Simulator:
-    def __init__(self, ti, tf, file_name):
+    def __init__(self, ti, tf, file_name, round_roubin_interval=5):
         self.ti = int(ti)
         self.tf = int(tf)
         self.t_current = 0
@@ -125,6 +131,9 @@ class Simulator:
         self.output_avaliable = 2
         self.disk_avaliable = 1
         self.is_sleeping = False
+        self.round_robin_queue = Queue()
+        self.round_roubin_interval = round_roubin_interval
+        self.cpu_ocuppied = False
         print("Dump no formato")
         print("<Instante> <Tipo de Evento> <Programa> <Acao> <Resultado>")
 
@@ -229,44 +238,50 @@ class Simulator:
             return "<Coloca job {} na fila de memoria> <Fila atualizada>".format(event.job.name)
 
         elif event.name == 'requisita_cpu':
-            if self.cpu_avaliable > 0:
-                if self.t_current < event.time:
-                    # nao retrocede o relogio
-                    self.t_current = event.time
-                # verifica se o Job está dormindo
-                if event.job.is_sleeping:
-                    event.job.wakeup_event = event
-                    return "<Job {} dormindo><Removido da lista de entrada>".format(event.job.name)
-                # atualiza tempo corrente
-                event.job.cpu_gained = self.t_current
-                # atualiza requisicoes de recursos
-                event.job.next_input = self.t_current + event.job.input_interval
-                event.job.next_output = self.t_current + event.job.output_interval
-                event.job.next_disk = self.t_current + event.job.disk_interval
-                if debug:
-                    print("CPU gained at {}".format(event.job.cpu_gained))
-                # determina qual o primeiro evento de entrada e saida sera realizado
-                next_event = self.return_next_event(event)
+            #if self.cpu_avaliable > 0:
+            if self.t_current < event.time:
+                # nao retrocede o relogio
+                self.t_current = event.time
+            # verifica se o Job está dormindo
+            if event.job.is_sleeping:
+                event.job.wakeup_event = event
+                return "<Job {} dormindo><Removido da lista de entrada>".format(event.job.name)
+            # atualiza tempo corrente
+            event.job.cpu_gained = self.t_current
+            # atualiza requisicoes de recursos
+            event.job.next_input = self.t_current + event.job.input_interval
+            event.job.next_output = self.t_current + event.job.output_interval
+            event.job.next_disk = self.t_current + event.job.disk_interval
+            if debug:
+                print("CPU gained at {}".format(event.job.cpu_gained))
+            # determina qual o primeiro evento de entrada e saida sera realizado
+            next_event = self.return_next_event(event)
+            # coloca na fila da CPU
+            if not self.cpu_ocuppied:
                 self.event_queue.put(next_event)
-                # diminui o número de cpus
-                self.cpu_avaliable -= 1
-                next_event.job.IsActive = True
-                return "<Evento {} na fila em {}s><CPU alocada para o JOB {}>".format(next_event.name, next_event.time,
-                                                                                      event.job.name)
+                self.cpu_ocuppied = True
             else:
-                if self.t_current < event.time:
+                self.cpu_queue.put(next_event)
+                #self.event_queue.put(self.cpu_queue.get())
+            # diminui o número de cpus
+            #self.cpu_avaliable -= 1
+            next_event.job.IsActive = True
+            return "<Evento {} na fila em {}s><CPU alocada para o JOB {}>".format(next_event.name, next_event.time,
+                                                                                  event.job.name)
+#            else:
+#                if self.t_current < event.time:
                     # nao retrocede o relogio
-                    self.t_current = event.time
+#                    self.t_current = event.time
                 # verifica se o Job está dormindo
-                if event.job.is_sleeping:
-                    event.job.wakeup_event = event
-                    return "<Job {} dormindo><Removido da lista de entrada>".format(event.job.name)
+#                if event.job.is_sleeping:
+#                    event.job.wakeup_event = event
+#                    return "<Job {} dormindo><Removido da lista de entrada>".format(event.job.name)
                     
                 # coloca job na ready list
-                self.cpu_queue.put(event)
-                event.job.IsActive = False
-                return "<Nao ha CPU disponivel para a execucao de {}> <JOB colocado na fila de cpu>".format(
-                    event.job.name)
+ #               self.cpu_queue.put(event)
+ #               event.job.IsActive = False
+ #               return "<Nao ha CPU disponivel para a execucao de {}> <JOB colocado na fila de cpu>".format(
+ #                   event.job.name)
 
         elif event.name == 'requisita_disco':
             # libera CPU
@@ -421,11 +436,14 @@ class Simulator:
 
         elif event.name == 'finaliza_processamento':
             # devolve CPU
-            self.cpu_avaliable += 1
+            # self.cpu_avaliable += 1
             if self.t_current < event.time:
                 self.t_current = event.time
             if not self.cpu_queue.empty():
                 self.event_queue.put(self.cpu_queue.get())
+            else:
+                # não tem mais processos utilizando a CPU
+                self.cpu_ocuppied = False
             self.free(event)
             # atualiza estado do Job pai
             event.job.father_job.internal_time += event.job.cpu_time
@@ -433,6 +451,19 @@ class Simulator:
             event.job.cpu_time = 0
             return "<Job {} finalizado!><CPU liberada! {} blocos de memoria liberados>".format(event.job.name,
                                                                                                event.job.memory_needed)
+        elif event.name == 'mudanca_contexto':
+            # atualiza instante da simulacao
+            if self.t_current < event.time:
+                self.t_current = event.time
+            # atualiza tempo de processamento 
+            cpu_time_old = event.job.cpu_time
+            event.job.cpu_time -= self.t_current - event.job.cpu_gained
+            event.job.father_job.internal_time += cpu_time_old - event.job.cpu_time
+            event.job.father_job.schedule_next_event(self)
+            # adiciona proximo evento solicitado pelo Job na fila 
+            self.cpu_queue.put(self.return_next_event(event))
+            # adiciona proximo evento da fila na fila global
+            self.event_queue.put(self.cpu_queue.get())
 
     '''
         Returns next event for job and update job's status
@@ -532,9 +563,13 @@ class Simulator:
         else:  # fim da execucao
             new_event = 'finaliza_processamento'
             event_time = self.t_current + event.job.cpu_time
-
-        return Event(new_event, event_time, event.job)
-
+        # verifica o que retorna primeiro, proximo evento ou troca de contexto
+        if event_time < self.t_current + self.round_roubin_interval:
+            return Event(new_event, event_time, event.job)
+        else:
+            print("Agendado mudanca de contexto")
+            return Event('mudanca_contexto', self.t_current + self.round_roubin_interval, event.job)
+            
     def free(self, event):
         for i in range(event.job.start_memory, event.job.memory_needed):
             self.memory_blocks[i] = 0
