@@ -1,6 +1,7 @@
 from queue import PriorityQueue
 from queue import Queue
 import numpy as np
+import heapq
 import csv
 
 # debug variables
@@ -16,15 +17,160 @@ def dump_event(event, simulator):
     print("<%d> <%s> <%s> " % (simulator.t_current, event.name, event.job.name))
 
 
-class Event:
-    '''
-    (name, time, job)
-    '''
+class File:
+    def __init__(self, owner, size, start_adress):
+        self.owner = owner
+        self.size = size
+        self.start_adress = start_adress
 
-    def __init__(self, name, time, job):
+
+# noinspection SpellCheckingInspection
+class InformationManager:
+    def __init__(self):
+        self.disk_blocks = np.zeros(1024)
+        self.disk_available = 1024
+        self.file_dict = {}
+        self.disk_queue = Queue()
+        self.last_index = 0
+    """
+        Libera arquivo
+    """
+    def free(self, index_file, simulator):
+        for i in range(self.file_dict.start_adress, self.file_dict.size):
+            self.disk_blocks[i] = 0
+        self.disk_available += self.file_dict.size
+        del(self.file_dict[index_file])
+        if not self.disk_queue.empty():
+            #   tenta colocar arquivo que estava na fila
+            simulator.event_queue.put(simulator.disk_queue.get())
+    """
+    Cria arquivo
+    """
+    def malloc(self, event, index_file, simulator):
+        # verifica se existe memoria disponivel
+        # politica de alocacao de first fit (busca gulosa)
+        if index_file in self.file_dict.keys():
+            if debug:
+                print("Tentativa de escrever arquivo já existtente!")
+                print("Job {} será morto".format(event.job.name))
+            simulator.event_queue.put(Event('aborta_processo', 0, event.job))
+            return False
+
+        if self.disk_available > event.file_size:
+            # verifica se existe uma regiao contigua de memoria para o processo
+            iaux_2 = 0
+            iaux = 0
+            memory_space = 0
+            while iaux < len(self.disk_blocks):
+                if self.disk_blocks[iaux] == 0:
+                    memory_space += 1
+                    if memory_space >= event.file_size:
+                        # encontrou memoria
+                        if debug:
+                            print("Encontrou bloco de memoria iniciando em %d" % iaux_2)
+                        # event.job.start_adress = iaux_2
+                        # marca bloco como ocupado
+                        for i in range(iaux_2, iaux_2 + event.file_size):
+                            self.disk_blocks[i] = index_file
+                        self.disk_available -= event.file_size
+                        self.file_dict[index_file] = File(event.job.father_job, event.file_size, iaux_2)
+                        return True
+                else:
+                    # Avanca iAux até proxima posicao livre
+                    while iaux < len(self.disk_blocks) and self.disk_blocks[iaux] != 0:
+                        iaux += 1
+                    if iaux == len(self.disk_blocks):
+                        if debug:
+                            print("Nao ha memoria disponivel")
+                        return False
+                    iaux -= 1
+                    iaux_2 = iaux
+                    pass
+                iaux += 1
+    """
+        move the disk program from one location to another
+    """
+    def realloc(self, event, index_file, simulator):
+        # verifica posse do arquivo
+        if index_file in self.file_dict.keys():
+            if debug:
+                print("Verifica se arquivo pertence ao processo!")
+            if self.file_dict[index_file].owner != event.job.father_job:
+                if debug:
+                    print("Pai inválido do arquivo")
+                simulator.event_queue.put(Event('aborta_processo', 0, event.job))
+                return False
+        else:
+            if debug:
+                print("Acesso inválido a arquivo!")
+            simulator.event_queue.put(Event('aborta_processo', 0, event.job))
+            return False
+        # verifica se existe uma regiao contigua de memoria para o processo
+        iaux_2 = 0
+        iaux = 0
+        memory_space = 0
+        while iaux < len(self.disk_blocks):
+            if self.disk_blocks[iaux] == 0:
+                memory_space += 1
+                if memory_space >= event.job.disk_needed:
+                    # encontrou memoria
+                    if debug:
+                        print("Encontrou bloco de memoria iniciando em %d" % iaux_2)
+                    break
+            else:
+                # Avanca iAux até proxima posicao livre
+                while iaux < len(self.disk_blocks) and self.disk_blocks[iaux] != 0:
+                    iaux += 1
+                if iaux == len(self.disk_blocks):
+                    if debug:
+                        print("Nao ha memoria disponivel")
+                    return False
+                iaux -= 1
+                iaux_2 = iaux
+                pass
+            iaux += 1
+        # apaga versao antiga do arquivo
+        for i in range (self.file_dict[index_file].start_adress, self.file_dict[index_file].start_adress + self.file_dict[index_file].size):
+            self.disk_blocks[i] = 0
+        self.disk_available += self.file_dict[index_file].size
+        # adiciona novas informações
+        for i in range(iaux_2, iaux_2 + event.file_size):
+            self.disk_blocks[i] = index_file
+        self.disk_available -= event.file_size
+        self.file_dict[index_file].start_adress = iaux_2
+        self.file_dict[index_file].size = event.file_size
+        return True
+
+    def read (self, event, index_file, simulator):
+        # verifica posse do arquivo
+        if index_file in self.file_dict.keys():
+            if debug:
+                print("Verifica se arquivo pertence ao processo!")
+            if self.file_dict[index_file].owner != event.job.father_job:
+                if debug:
+                    print("Pai inválido do arquivo")
+                simulator.event_queue.put(Event('aborta_processo', 0, event.job))
+                return False
+        else:
+            if debug:
+                print("Acesso inválido a arquivo!")
+            simulator.event_queue.put(Event('aborta_processo', 0, event.job))
+            return False
+        # acesso válido
+        return True
+
+
+class Event:
+    """
+    (name, time, job)
+    """
+
+    def __init__(self, name, time, job, file_index=None, file_size=None):
         self.name = name
         self.time = time
         self.job = job
+        self.file_index = file_index
+        self.file_size = file_size
 
     def __eq__(self, other):
         if not isinstance(other, Event):
@@ -69,11 +215,24 @@ class Job:
                 elif request.name == 'adormece':
                     print("<Segmento adormecido><Segmento marcado para ser retirado da fila>")
                     request.job.is_sleeping = True
-                else:
+                elif request.name == 'acorda':
                     request.job.is_sleeping = False
                     if request.job.wakeup_event is not None:
                         simulator.event_queue.put(request.job.wakeup_event)
                         request.job.wakeup_event = None
+                elif request.name == 'le_arquivo':
+                    simulator.event_queue.put(Event('le_arquivo', simulator.t_current, request.job,
+                                                    request.file_index, int(request.file_size)))
+                elif request.name == 'escreve_arquivo':
+                    simulator.event_queue.put(Event('escreve_arquivo', simulator.t_current, request.job,
+                                                    request.file_index, int(request.file_size)))
+                elif request.name == 'apaga_arquivo':
+                    simulator.event_queue.put(Event('apaga_arquivo', simulator.t_current, request.job,
+                                                    request.file_index, int(request.file_size)))
+                elif request.name == 'cria_arquivo':
+                    simulator.event_queue.put(Event('cria_arquivo', simulator.t_current, request.job,
+                                                    request.file_index, int(request.file_size)))
+
                 try:
                     if debug:
                         print("Próximo evento {}".format(self.segment_queue.queue[0].time))
@@ -115,7 +274,7 @@ class JobSegment:
 
 
 class Simulator:
-    def __init__(self, ti, tf, file_name, round_roubin_interval=5):
+    def __init__(self, ti, tf, file_name, round_robin_interval=5):
         self.ti = int(ti)
         self.tf = int(tf)
         self.t_current = 0
@@ -138,8 +297,9 @@ class Simulator:
         self.disk_avaliable = 1
         self.is_sleeping = False
         self.round_robin_queue = Queue()
-        self.round_roubin_interval = round_roubin_interval
+        self.round_roubin_interval = round_robin_interval
         self.cpu_ocuppied = False
+        self.information_manager = InformationManager()
         print("Dump no formato")
         print("<Instante> <Tipo de Evento> <Programa> <Acao> <Resultado>")
 
@@ -175,7 +335,8 @@ class Simulator:
                             job.segment_list.append(new_job)
                         else:
                             # continue preenchendo lista de segmentos
-                            new_job = JobSegment(row[0] + " segmento {}".format(len(job.segment_list)), row[1], row[2], row[3], row[4], row[5], row[6],
+                            new_job = JobSegment(row[0] + " segmento {}".format(len(job.segment_list)), row[1], row[2],
+                                                 row[3], row[4], row[5], row[6],
                                                  row[7], row[8], row[9], row[10], row[11], row[12], job)
                             job.segment_list.append(new_job)
                     else:
@@ -196,7 +357,7 @@ class Simulator:
                     # primeira linha é o cabecalho
                     if line_count > 0:
                         # adiciona evento na fila do Job
-                        job.segment_queue.put(Event(row[0], int(row[1]), job.segment_list[int(row[2])]))
+                        job.segment_queue.put(Event(row[0], int(row[1]), job.segment_list[int(row[2])], row[3], row[4]))
                     else:
                         # pula cabeçalho
                         line_count = 1
@@ -473,6 +634,80 @@ class Simulator:
             event.job.cpu_time = 0
             return "<Job {} finalizado!><CPU liberada! {} blocos de memoria liberados>".format(event.job.name,
                                                                                                event.job.memory_needed)
+        elif event.name == 'le_arquivo':
+            if self.information_manager.read(event, event.file_index, self):
+                self.event_queue.put(Event('requisita_disco', self.t_current, event.job))
+                return "<Job {} lê arquivo {} permitido><Job solicita o disco>".format(event.job.name, event.file_index)
+            else:
+                return "<Job {} lê arquivo {} negado><Job será abortado>".format(event.job.name, event.file_index)
+
+        elif event.name == 'escreve_arquivo':
+            if self.information_manager.realloc(event, event.file_index, self):
+                self.event_queue.put(Event('requisita_disco', self.t_current, event.job))
+                return "<Job {} lê arquivo {} permitido><Job solicita o disco>".format(event.job.name, event.file_index)
+            else:
+                self.disk_queue.put(event)
+                return "<Job {} lê arquivo {} negado><Job será abortado>".format(event.job.name, event.file_index)
+
+        elif event.name == 'cria_arquivo':
+            if self.information_manager.malloc(event, event.file_index, self):
+                self.event_queue.put(Event('requisita_disco', self.t_current, event.job))
+                return "<Job {} lê arquivo {} permitido><Job solicita o disco>".format(event.job.name, event.file_index)
+            else:
+                self.disk_queue.put(event)
+                return "<Job {} lê arquivo {} negado><Job será abortado>".format(event.job.name, event.file_index)
+
+        elif event.name == 'exclui_arquivo':
+            if self.information_manager.free(event, event.file_index, self):
+                self.event_queue.put(Event('requisita_disco', self.t_current, event.job))
+                return "<Job {} lê arquivo {} permitido><Job solicita o disco>".format(event.job.name, event.file_index)
+            else:
+                self.disk_queue.put(event)
+                return "<Job {} lê arquivo {} negado><Job será abortado>".format(event.job.name, event.file_index)
+
+        elif event.name == 'aborta_processo':
+            # remove Jobs de todas as filas
+            for element in self.event_queue.queue:
+                if element.job.father_job == event.job.father_job:
+                    self.event_queue.queue.remove(element)
+                # heapq.heapify(self.event_queue)
+            delete_queue = []
+            for element in self.disk_queue.queue:
+                if element.job.father_job == event.job.father_job:
+                    delete_queue.append(element)
+            for element in delete_queue:
+                self.disk_queue.queue.remove(element)
+                # heapq.heapify(self.event_queue)
+            delete_queue = []
+            for element in self.memory_queue.queue:
+                if element.job.father_job == event.job.father_job:
+                    delete_queue.append(element)
+            for element in delete_queue:
+                self.memory_queue.queue.remove(element)
+
+            delete_queue = []
+            for element in self.input_queue.queue:
+                if element.job.father_job == event.job.father_job:
+                    delete_queue.append(element)
+            for element in delete_queue:
+                self.input_queue.queue.remove(element)
+
+            delete_queue = []
+            for element in self.output_queue.queue:
+                if element.job.father_job == event.job.father_job:
+                    delete_queue.append(element)
+            for element in delete_queue:
+                self.output_queue.queue.remove(element)
+
+            delete_queue = []
+            for element in self.cpu_queue.queue:
+                if element.job.father_job == event.job.father_job:
+                    delete_queue.append(element)
+            for element in delete_queue:
+                self.cpu_queue.queue.remove(element)
+                # heapq.heapify(self.cpu_queue)
+            return "<Job {} abortado><Todas as filas atualizadas>".format(event.job.father_job.name)
+
         elif event.name == 'mudanca_contexto':
             # atualiza instante da simulacao
             if self.t_current < event.time:
