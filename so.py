@@ -35,14 +35,18 @@ class InformationManager:
     """
         Libera arquivo
     """
-    def free(self, index_file, simulator):
-        for i in range(self.file_dict.start_adress, self.file_dict.size):
+    def free(self, event, index_file, simulator):
+        if index_file not in self.file_dict.keys():
+            simulator.event_queue.put(Event('aborta_processo', 0, event.job))
+            return False
+        for i in range(self.file_dict[index_file].start_adress, self.file_dict[index_file].size):
             self.disk_blocks[i] = 0
-        self.disk_available += self.file_dict.size
+        self.disk_available += self.file_dict[index_file].size
         del(self.file_dict[index_file])
         if not self.disk_queue.empty():
             #   tenta colocar arquivo que estava na fila
             simulator.event_queue.put(simulator.disk_queue.get())
+        return True
     """
     Cria arquivo
     """
@@ -221,17 +225,21 @@ class Job:
                         simulator.event_queue.put(request.job.wakeup_event)
                         request.job.wakeup_event = None
                 elif request.name == 'le_arquivo':
+                    request.job.IsActive = False
                     simulator.event_queue.put(Event('le_arquivo', simulator.t_current, request.job,
-                                                    request.file_index, int(request.file_size)))
+                                                    int(request.file_index), int(request.file_size)))
                 elif request.name == 'escreve_arquivo':
+                    request.job.IsActive = False
                     simulator.event_queue.put(Event('escreve_arquivo', simulator.t_current, request.job,
-                                                    request.file_index, int(request.file_size)))
+                                                    int(request.file_index), int(request.file_size)))
                 elif request.name == 'apaga_arquivo':
+                    request.job.IsActive = False
                     simulator.event_queue.put(Event('apaga_arquivo', simulator.t_current, request.job,
-                                                    request.file_index, int(request.file_size)))
+                                                    int(request.file_index), int(request.file_size)))
                 elif request.name == 'cria_arquivo':
+                    request.job.IsActive = False
                     simulator.event_queue.put(Event('cria_arquivo', simulator.t_current, request.job,
-                                                    request.file_index, int(request.file_size)))
+                                                    int(request.file_index), int(request.file_size)))
 
                 try:
                     if debug:
@@ -495,6 +503,22 @@ class Simulator:
                 if debug:
                     print("Disco disponivel")
                 self.disk_avaliable -= 1
+                # remove evento de solicitacao da CPU da fila
+                delete_queue = []
+                for element in self.event_queue.queue:
+                    if element.job.name == event.job.name and (element.name == 'requisita_cpu'
+                    or element.name == 'mudanca_contexto'):
+                        delete_queue.append(element)
+                for element in delete_queue:
+                    self.event_queue.queue.remove(element)
+                delete_queue = []
+                for element in self.cpu_queue.queue:
+                    if element.job.name == event.job.name:
+                        delete_queue.append(element)
+                for element in delete_queue:
+                    self.event_queue.queue.remove(element)
+                
+                
                 self.event_queue.put(Event('libera_disco', self.t_current + event.job.disk_time, event.job))
                 return "<Job {} ganhou acesso ao disco ate {}> <CPU liberada, disco alocado>".format(event.job.name,
                                                                                                      self.t_current + event.job.disk_time)
@@ -657,7 +681,7 @@ class Simulator:
                 self.disk_queue.put(event)
                 return "<Job {} lê arquivo {} negado><Job será abortado>".format(event.job.name, event.file_index)
 
-        elif event.name == 'exclui_arquivo':
+        elif event.name == 'apaga_arquivo':
             if self.information_manager.free(event, event.file_index, self):
                 self.event_queue.put(Event('requisita_disco', self.t_current, event.job))
                 return "<Job {} lê arquivo {} permitido><Job solicita o disco>".format(event.job.name, event.file_index)
@@ -667,9 +691,13 @@ class Simulator:
 
         elif event.name == 'aborta_processo':
             # remove Jobs de todas as filas
+            delete_queue = []
             for element in self.event_queue.queue:
                 if element.job.father_job == event.job.father_job:
-                    self.event_queue.queue.remove(element)
+                    delete_queue.append(element)
+            for element in delete_queue:
+                self.event_queue.queue.remove(element)
+                    #self.event_queue.queue.remove(element)
                 # heapq.heapify(self.event_queue)
             delete_queue = []
             for element in self.disk_queue.queue:
