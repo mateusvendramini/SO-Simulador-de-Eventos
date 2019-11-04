@@ -1,6 +1,2 @@
 tipo, instante, segmento, indice, tamanho
 referencia, 0, 0, 0, 0
-cria_arquivo, 1, 1, 100, 0
-adormece, 10, 0, 0, 0
-referencia, 10, 1, 0, 0
-acorda, 19, 0, 0, 0

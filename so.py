@@ -732,6 +732,8 @@ class Simulator:
             # dá cpu para nova requisico
             next_event.job.had_cpu = True
             next_event.job.cpu_gained = self.t_current
+            if next_event.name == 'mudanca_contexto':
+                next_event = self.return_next_event(next_event)
             self.event_queue.put(next_event)
             return "<Contexto mudado><CPU alocada para {}>".format(next_event.job.name)
 
