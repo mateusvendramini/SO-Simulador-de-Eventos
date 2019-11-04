@@ -39,7 +39,7 @@ class InformationManager:
         if index_file not in self.file_dict.keys():
             simulator.event_queue.put(Event('aborta_processo', 0, event.job))
             return False
-        for i in range(self.file_dict[index_file].start_adress, self.file_dict[index_file].size):
+        for i in range(self.file_dict[index_file].start_adress, self.file_dict[index_file].start_adress + self.file_dict[index_file].size):
             self.disk_blocks[i] = 0
         self.disk_available += self.file_dict[index_file].size
         del(self.file_dict[index_file])
@@ -122,7 +122,7 @@ class InformationManager:
         iaux = 0
         memory_space = 0
         while iaux < len(self.disk_blocks):
-            if self.disk_blocks[iaux] == 0:
+            if self.disk_blocks[iaux] == 0 or self.disk_blocks[iaux] == index_file:
                 memory_space += 1
                 if memory_space >= event.file_size:
                     # encontrou memoria
