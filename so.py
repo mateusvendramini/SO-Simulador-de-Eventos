@@ -124,7 +124,7 @@ class InformationManager:
         while iaux < len(self.disk_blocks):
             if self.disk_blocks[iaux] == 0:
                 memory_space += 1
-                if memory_space >= event.job.disk_needed:
+                if memory_space >= event.file_size:
                     # encontrou memoria
                     if debug:
                         print("Encontrou bloco de memoria iniciando em %d" % iaux_2)
@@ -133,7 +133,7 @@ class InformationManager:
                 # Avanca iAux até proxima posicao livre
                 while iaux < len(self.disk_blocks) and self.disk_blocks[iaux] != 0:
                     iaux += 1
-                if iaux == len(self.disk_blocks):
+                if iaux >= len(self.disk_blocks):
                     if debug:
                         print("Nao ha memoria disponivel")
                     return False
@@ -141,6 +141,10 @@ class InformationManager:
                 iaux_2 = iaux
                 pass
             iaux += 1
+        if iaux >= len(self.disk_blocks) or iaux_2 + event.file_size > len(self.disk_blocks):
+                    if debug:
+                        print("Nao ha memoria disponivel")
+                    return False
         # apaga versao antiga do arquivo
         for i in range (self.file_dict[index_file].start_adress, self.file_dict[index_file].start_adress + self.file_dict[index_file].size):
             self.disk_blocks[i] = 0
