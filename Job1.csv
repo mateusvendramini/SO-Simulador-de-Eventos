@@ -1,6 +1,8 @@
 tipo, instante, segmento, indice, tamanho
 referencia, 0, 0, 0, 0
 cria_arquivo,0,0,1,100
-escreve_arquivo,2,0,1,200
-le_arquivo,3,0,1,200
-apaga_arquivo,4,0,1,200
+le_arquivo,0,0,1,0
+le_arquivo,0,0,2,0
+cria_arquivo,1,0,2,924
+apaga_arquivo,3,0,1,100
+cria_arquivo,6,0,2,10

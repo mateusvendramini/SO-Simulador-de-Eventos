@@ -91,6 +91,14 @@ class InformationManager:
                     iaux_2 = iaux
                     pass
                 iaux += 1
+            if debug:
+                print("fim do while")
+            return False
+        else:
+            if debug:
+                print("sem espaco")
+            return False
+        
     """
         move the disk program from one location to another
     """
@@ -207,6 +215,7 @@ class Job:
     def schedule_next_event(self, simulator):
         # print("Tempo do evento {} Tempo atual {}".format(self.segment_queue.queue[0].time, self.internal_time))
         try:
+            iAux = 0
             while self.segment_queue.queue[0].time <= self.internal_time:
                 # print("Disparando evento")
                 request = self.segment_queue.get()
@@ -215,7 +224,8 @@ class Job:
                 if request.name == 'referencia':
                     # cria evento de requisicao de memoria
                     request.job.is_sleeping = False
-                    simulator.event_queue.put(Event('entrada', simulator.t_current, request.job))
+                    simulator.event_queue.put(Event('entrada', simulator.t_current + iAux, request.job))
+                    iAux = iAux + 1
                 elif request.name == 'adormece':
                     print("<Segmento adormecido><Segmento marcado para ser retirado da fila>")
                     request.job.is_sleeping = True
@@ -226,20 +236,24 @@ class Job:
                         request.job.wakeup_event = None
                 elif request.name == 'le_arquivo':
                     request.job.IsActive = False
-                    simulator.event_queue.put(Event('le_arquivo', simulator.t_current, request.job,
+                    simulator.event_queue.put(Event('le_arquivo', simulator.t_current + iAux, request.job,
                                                     int(request.file_index), int(request.file_size)))
+                    iAux = iAux + 1
                 elif request.name == 'escreve_arquivo':
                     request.job.IsActive = False
-                    simulator.event_queue.put(Event('escreve_arquivo', simulator.t_current, request.job,
+                    simulator.event_queue.put(Event('escreve_arquivo', simulator.t_current +iAux, request.job,
                                                     int(request.file_index), int(request.file_size)))
+                    iAux = iAux + 1
                 elif request.name == 'apaga_arquivo':
                     request.job.IsActive = False
-                    simulator.event_queue.put(Event('apaga_arquivo', simulator.t_current, request.job,
+                    simulator.event_queue.put(Event('apaga_arquivo', simulator.t_current + iAux, request.job,
                                                     int(request.file_index), int(request.file_size)))
+                    iAux = iAux + 1
                 elif request.name == 'cria_arquivo':
                     request.job.IsActive = False
-                    simulator.event_queue.put(Event('cria_arquivo', simulator.t_current, request.job,
+                    simulator.event_queue.put(Event('cria_arquivo', simulator.t_current + iAux, request.job,
                                                     int(request.file_index), int(request.file_size)))
+                    iAux = iAux + 1
 
                 try:
                     if debug:
@@ -535,7 +549,7 @@ class Simulator:
                 self.event_queue.put(self.disk_queue.get())
             # recoloca job na readylist
             self.event_queue.put(Event('requisita_cpu', self.t_current, event.job))
-            return "<JOB {} devolveu disco> <JOB recolocado na readylist>".format(event.name)
+            return "<JOB {} devolveu disco> <JOB recolocado na readylist>".format(event.job.name)
 
         elif event.name == 'requisita_entrada':
             # verifica se o Job está dormindo
