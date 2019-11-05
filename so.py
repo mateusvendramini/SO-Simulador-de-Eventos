@@ -534,8 +534,7 @@ class Simulator:
                     if element.job.name == event.job.name:
                         delete_queue.append(element)
                 for element in delete_queue:
-                    self.event_queue.queue.remove(element)
-                
+                    self.cpu_queue.queue.remove(element)
                 
                 self.event_queue.put(Event('libera_disco', self.t_current + event.job.disk_time, event.job))
                 return "<Job {} ganhou acesso ao disco ate {}> <CPU liberada, disco alocado>".format(event.job.name,

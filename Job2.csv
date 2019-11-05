@@ -1,2 +1,4 @@
 tipo, instante, segmento, indice, tamanho
 referencia, 0, 0, 0, 0
+adormece, 20, 0, 0, 0
+referencia, 20, 0, 1, 0
